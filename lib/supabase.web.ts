@@ -1,16 +1,13 @@
-import 'react-native-url-polyfill/auto';
-import AsyncStorage from '@react-native-async-storage/async-storage';
 import { createClient } from '@supabase/supabase-js';
 
 const supabaseUrl = process.env.EXPO_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.EXPO_PUBLIC_SUPABASE_ANON_KEY!;
 
-// This file is used for native (iOS/Android) only.
-// For web, Metro resolves lib/supabase.web.ts instead, which avoids
-// importing AsyncStorage (which references `window` and breaks static builds).
+// On web, Supabase defaults to localStorage — no custom storage needed.
+// Do NOT import @react-native-async-storage here; it references `window` at
+// module load time and breaks static export builds.
 export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
   auth: {
-    storage: AsyncStorage,
     autoRefreshToken: true,
     persistSession: true,
     detectSessionInUrl: false,
