@@ -5,9 +5,12 @@ import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
 import { Colors } from '@/constants/theme';
 import { useColorScheme } from '@/hooks/use-color-scheme';
+import { useAuth } from '@/lib/auth-context';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
+  const { role } = useAuth();
+  const isGlobalAdmin = role === 'global_admin';
 
   return (
     <Tabs
@@ -19,15 +22,44 @@ export default function TabLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'Home',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="house.fill" color={color} />,
+          title: isGlobalAdmin ? 'Dashboard' : 'Home',
+          tabBarIcon: ({ color }) => (
+            <IconSymbol
+              size={28}
+              name={isGlobalAdmin ? 'building.2.fill' : 'house.fill'}
+              color={color}
+            />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="live-dashboard"
+        options={{
+          title: 'Live Dashboard',
+          href: isGlobalAdmin ? undefined : null,
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={28} name="chart.bar.fill" color={color} />
+          ),
+        }}
+      />
+      <Tabs.Screen
+        name="management"
+        options={{
+          title: 'Management',
+          href: isGlobalAdmin ? undefined : null,
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={28} name="gearshape.fill" color={color} />
+          ),
         }}
       />
       <Tabs.Screen
         name="explore"
         options={{
           title: 'Explore',
-          tabBarIcon: ({ color }) => <IconSymbol size={28} name="paperplane.fill" color={color} />,
+          href: isGlobalAdmin ? null : undefined,
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={28} name="paperplane.fill" color={color} />
+          ),
         }}
       />
     </Tabs>
