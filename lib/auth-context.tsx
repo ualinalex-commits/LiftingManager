@@ -22,9 +22,9 @@ const AuthContext = createContext<AuthContextType>({
 
 async function fetchRole(userId: string): Promise<{ role: UserRole; error: string | null }> {
   const { data, error } = await supabase
-    .from('profiles')
+    .from('users')
     .select('role')
-    .eq('id', userId)
+    .eq('supabase_auth_uid', userId)
     .single();
   console.log('[fetchRole] userId:', userId, '| data:', data, '| error:', error?.message ?? null);
   return { role: (data?.role as UserRole) ?? null, error: error?.message ?? null };
