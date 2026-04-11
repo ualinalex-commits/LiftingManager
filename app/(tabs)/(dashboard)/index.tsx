@@ -452,7 +452,7 @@ function CreateAdminModal({
     setError('');
 
     const { error: insertError } = await supabase.from('users').insert({
-      full_name: fullName.trim(),
+      name: fullName.trim(),
       email: email.trim().toLowerCase(),
       phone: phone.trim() || null,
       cpcs_number: cpcsNumber.trim(),
