@@ -1,6 +1,7 @@
 import React, { useCallback, useEffect, useState } from 'react';
 import {
   ActivityIndicator,
+  Modal,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -9,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { supabase } from '@/lib/supabase';
+import { useAuth } from '@/lib/auth-context';
 
 // ─── types ────────────────────────────────────────────────────────────────────
 
@@ -26,83 +28,170 @@ type SiteRow = { id: string; name: string };
 type CraneWithSite = CraneRow & { site_name: string | null };
 
 type Stats = {
-  totalCranes: number;
+  activeCranes: number;
   workingCranes: number;
-  pendingCranes: number;
-  todayLifts: number;
+  pendingLifts: number;
+  todayActivity: number;
 };
 
 // ─── screen ───────────────────────────────────────────────────────────────────
 
 export default function LiveDashboardScreen() {
+  const { role, companyId } = useAuth();
+  const isCompanyAdmin = role === 'company_admin';
+
+  const [sites, setSites] = useState<SiteRow[]>([]);
+  const [selectedSiteId, setSelectedSiteId] = useState<string | null>(null);
+  const [showSitePicker, setShowSitePicker] = useState(false);
+
   const [stats, setStats] = useState<Stats>({
-    totalCranes: 0,
+    activeCranes: 0,
     workingCranes: 0,
-    pendingCranes: 0,
-    todayLifts: 0,
+    pendingLifts: 0,
+    todayActivity: 0,
   });
   const [cranes, setCranes] = useState<CraneWithSite[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
+  // Load sites for company_admin site selector
+  useEffect(() => {
+    if (!isCompanyAdmin || !companyId) return;
+    supabase
+      .from('sites')
+      .select('id, name')
+      .eq('company_id', companyId)
+      .order('name')
+      .then(({ data }) => {
+        const list = data ?? [];
+        setSites(list);
+        if (list.length > 0 && !selectedSiteId) {
+          setSelectedSiteId(list[0].id);
+        }
+      });
+  }, [isCompanyAdmin, companyId]);
+
   const load = useCallback(async () => {
     setLoading(true);
     setError('');
     try {
-      const [cranesResult, sitesResult, liftsResult] = await Promise.allSettled([
-        supabase.from('cranes').select('id, name, model, serial_number, site_id, status').order('name'),
-        supabase.from('sites').select('id, name'),
-        supabase
-          .from('lifts')
-          .select('id', { count: 'exact', head: true })
-          .gte('created_at', new Date(new Date().setHours(0, 0, 0, 0)).toISOString()),
-      ]);
-
-      // Build site lookup map
-      const siteMap: Record<string, string> = {};
-      if (sitesResult.status === 'fulfilled' && !sitesResult.value.error) {
-        for (const s of sitesResult.value.data ?? []) {
-          siteMap[s.id] = s.name;
-        }
+      if (isCompanyAdmin) {
+        await loadCompanyAdminDashboard(selectedSiteId, companyId);
+      } else {
+        await loadGlobalAdminDashboard();
       }
-
-      // Process cranes
-      let allCranes: CraneWithSite[] = [];
-      if (cranesResult.status === 'fulfilled' && !cranesResult.value.error) {
-        allCranes = (cranesResult.value.data ?? []).map((c) => ({
-          ...c,
-          site_name: c.site_id ? (siteMap[c.site_id] ?? 'Unknown Site') : null,
-        }));
-      }
-
-      // Today's lifts count
-      let todayLifts = 0;
-      if (liftsResult.status === 'fulfilled' && !liftsResult.value.error) {
-        todayLifts = liftsResult.value.count ?? 0;
-      }
-
-      const workingCranes = allCranes.filter((c) => c.status === 'working').length;
-      const pendingCranes = allCranes.filter(
-        (c) => c.status === 'pending' || c.status === 'idle' || !c.status,
-      ).length;
-
-      setCranes(allCranes);
-      setStats({
-        totalCranes: allCranes.length,
-        workingCranes,
-        pendingCranes,
-        todayLifts,
-      });
     } catch (e: any) {
       setError(e.message ?? 'Failed to load dashboard.');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [isCompanyAdmin, selectedSiteId, companyId]);
+
+  async function loadCompanyAdminDashboard(siteId: string | null, cId: string | null) {
+    if (!cId) return;
+
+    // Fetch cranes filtered by site (or all company cranes if no site selected)
+    let cranesQuery = supabase
+      .from('cranes')
+      .select('id, name, model, serial_number, site_id, status')
+      .eq('company_id', cId)
+      .order('name');
+    if (siteId) cranesQuery = cranesQuery.eq('site_id', siteId);
+
+    const [cranesResult, sitesResult, pendingLiftsResult, todayLogsResult] =
+      await Promise.allSettled([
+        cranesQuery,
+        supabase.from('sites').select('id, name').eq('company_id', cId),
+        siteId
+          ? supabase
+              .from('crane_schedules')
+              .select('id', { count: 'exact', head: true })
+              .eq('status', 'pending')
+              .eq('site_id', siteId)
+          : Promise.resolve({ count: 0, error: null }),
+        siteId
+          ? supabase
+              .from('crane_logs')
+              .select('id', { count: 'exact', head: true })
+              .eq('site_id', siteId)
+              .gte('created_at', new Date(new Date().setHours(0, 0, 0, 0)).toISOString())
+          : Promise.resolve({ count: 0, error: null }),
+      ]);
+
+    const siteMap: Record<string, string> = {};
+    if (sitesResult.status === 'fulfilled' && !sitesResult.value.error) {
+      for (const s of sitesResult.value.data ?? []) siteMap[s.id] = s.name;
+    }
+
+    let allCranes: CraneWithSite[] = [];
+    if (cranesResult.status === 'fulfilled' && !cranesResult.value.error) {
+      allCranes = (cranesResult.value.data ?? []).map((c) => ({
+        ...c,
+        site_name: c.site_id ? (siteMap[c.site_id] ?? 'Unknown Site') : null,
+      }));
+    }
+
+    const pendingLifts =
+      pendingLiftsResult.status === 'fulfilled' && !(pendingLiftsResult.value as any).error
+        ? ((pendingLiftsResult.value as any).count ?? 0)
+        : 0;
+
+    const todayActivity =
+      todayLogsResult.status === 'fulfilled' && !(todayLogsResult.value as any).error
+        ? ((todayLogsResult.value as any).count ?? 0)
+        : 0;
+
+    setCranes(allCranes);
+    setStats({
+      activeCranes: allCranes.filter((c) => c.status === 'active' || c.status === 'working').length,
+      workingCranes: allCranes.filter((c) => c.status === 'working').length,
+      pendingLifts,
+      todayActivity,
+    });
+  }
+
+  async function loadGlobalAdminDashboard() {
+    const [cranesResult, sitesResult, liftsResult] = await Promise.allSettled([
+      supabase.from('cranes').select('id, name, model, serial_number, site_id, status').order('name'),
+      supabase.from('sites').select('id, name'),
+      supabase
+        .from('lifts')
+        .select('id', { count: 'exact', head: true })
+        .gte('created_at', new Date(new Date().setHours(0, 0, 0, 0)).toISOString()),
+    ]);
+
+    const siteMap: Record<string, string> = {};
+    if (sitesResult.status === 'fulfilled' && !sitesResult.value.error) {
+      for (const s of sitesResult.value.data ?? []) siteMap[s.id] = s.name;
+    }
+
+    let allCranes: CraneWithSite[] = [];
+    if (cranesResult.status === 'fulfilled' && !cranesResult.value.error) {
+      allCranes = (cranesResult.value.data ?? []).map((c) => ({
+        ...c,
+        site_name: c.site_id ? (siteMap[c.site_id] ?? 'Unknown Site') : null,
+      }));
+    }
+
+    let todayLifts = 0;
+    if (liftsResult.status === 'fulfilled' && !liftsResult.value.error) {
+      todayLifts = liftsResult.value.count ?? 0;
+    }
+
+    setCranes(allCranes);
+    setStats({
+      activeCranes: allCranes.filter((c) => c.status === 'active' || c.status === 'working').length,
+      workingCranes: allCranes.filter((c) => c.status === 'working').length,
+      pendingLifts: allCranes.filter((c) => c.status === 'pending' || c.status === 'idle' || !c.status).length,
+      todayActivity: todayLifts,
+    });
+  }
 
   useEffect(() => {
     load();
   }, [load]);
+
+  const selectedSiteName = sites.find((s) => s.id === selectedSiteId)?.name ?? 'All Sites';
 
   if (loading) {
     return (
@@ -122,6 +211,17 @@ export default function LiveDashboardScreen() {
         </Pressable>
       </View>
 
+      {/* Site selector — company_admin only */}
+      {isCompanyAdmin && sites.length > 0 ? (
+        <Pressable style={styles.siteSelectorRow} onPress={() => setShowSitePicker(true)}>
+          <View style={styles.siteSelectorInner}>
+            <Text style={styles.siteSelectorLabel}>Site</Text>
+            <Text style={styles.siteSelectorValue}>{selectedSiteName}</Text>
+          </View>
+          <Text style={styles.siteSelectorChevron}>▾</Text>
+        </Pressable>
+      ) : null}
+
       {error ? (
         <View style={styles.errorBanner}>
           <Text style={styles.errorBannerText}>{error}</Text>
@@ -134,14 +234,27 @@ export default function LiveDashboardScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {/* Stat cards */}
         <View style={styles.statsGrid}>
-          <StatCard label="Total Cranes" value={stats.totalCranes} accent="#0a7ea4" />
-          <StatCard label="Working" value={stats.workingCranes} accent="#16a34a" />
-          <StatCard label="Pending" value={stats.pendingCranes} accent="#d97706" />
-          <StatCard label="Today's Lifts" value={stats.todayLifts} accent="#7c3aed" />
+          {isCompanyAdmin ? (
+            <>
+              <StatCard label="Active Cranes" value={stats.activeCranes} accent="#16a34a" />
+              <StatCard label="Working" value={stats.workingCranes} accent="#0a7ea4" />
+              <StatCard label="Pending Lifts" value={stats.pendingLifts} accent="#d97706" />
+              <StatCard label="Today's Activity" value={stats.todayActivity} accent="#7c3aed" />
+            </>
+          ) : (
+            <>
+              <StatCard label="Total Cranes" value={cranes.length} accent="#0a7ea4" />
+              <StatCard label="Working" value={stats.workingCranes} accent="#16a34a" />
+              <StatCard label="Pending/Idle" value={stats.pendingLifts} accent="#d97706" />
+              <StatCard label="Today's Lifts" value={stats.todayActivity} accent="#7c3aed" />
+            </>
+          )}
         </View>
 
         {/* Cranes list */}
-        <Text style={styles.sectionTitle}>All Cranes</Text>
+        <Text style={styles.sectionTitle}>
+          {isCompanyAdmin ? `Cranes${selectedSiteId ? '' : ' (All Sites)'}` : 'All Cranes'}
+        </Text>
 
         {cranes.length === 0 ? (
           <View style={styles.emptyCard}>
@@ -157,7 +270,7 @@ export default function LiveDashboardScreen() {
                     {crane.model ? (
                       <Text style={styles.craneMeta}>{crane.model}</Text>
                     ) : null}
-                    {crane.site_name ? (
+                    {crane.site_name && !selectedSiteId ? (
                       <Text style={styles.craneSite}>{crane.site_name}</Text>
                     ) : null}
                   </View>
@@ -175,6 +288,38 @@ export default function LiveDashboardScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* Site picker modal */}
+      <Modal
+        visible={showSitePicker}
+        animationType="slide"
+        presentationStyle="pageSheet"
+        onRequestClose={() => setShowSitePicker(false)}>
+        <SafeAreaView style={styles.pickerContainer}>
+          <View style={styles.pickerHeader}>
+            <Text style={styles.pickerTitle}>Select Site</Text>
+            <Pressable onPress={() => setShowSitePicker(false)}>
+              <Text style={styles.pickerDone}>Done</Text>
+            </Pressable>
+          </View>
+          <ScrollView contentContainerStyle={styles.pickerBody}>
+            {sites.map((s) => (
+              <Pressable
+                key={s.id}
+                style={[styles.pickerItem, selectedSiteId === s.id && styles.pickerItemSelected]}
+                onPress={() => {
+                  setSelectedSiteId(s.id);
+                  setShowSitePicker(false);
+                }}>
+                <Text style={[styles.pickerItemText, selectedSiteId === s.id && styles.pickerItemTextSelected]}>
+                  {s.name}
+                </Text>
+                {selectedSiteId === s.id && <Text style={styles.pickerItemCheck}>✓</Text>}
+              </Pressable>
+            ))}
+          </ScrollView>
+        </SafeAreaView>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -194,19 +339,23 @@ function StatCard({ label, value, accent }: { label: string; value: number; acce
 
 function statusBadgeStyle(status: string) {
   switch (status) {
-    case 'working': return { backgroundColor: '#dcfce7' };
-    case 'pending': return { backgroundColor: '#fef9c3' };
-    case 'idle':    return { backgroundColor: '#f3f4f6' };
-    default:        return { backgroundColor: '#f3f4f6' };
+    case 'active':         return { backgroundColor: '#dcfce7' };
+    case 'working':        return { backgroundColor: '#dbeafe' };
+    case 'pending':        return { backgroundColor: '#fef9c3' };
+    case 'idle':           return { backgroundColor: '#f3f4f6' };
+    case 'out_of_service': return { backgroundColor: '#fee2e2' };
+    default:               return { backgroundColor: '#f3f4f6' };
   }
 }
 
 function statusTextStyle(status: string) {
   switch (status) {
-    case 'working': return { color: '#16a34a' };
-    case 'pending': return { color: '#b45309' };
-    case 'idle':    return { color: '#6b7280' };
-    default:        return { color: '#6b7280' };
+    case 'active':         return { color: '#16a34a' };
+    case 'working':        return { color: '#1d4ed8' };
+    case 'pending':        return { color: '#b45309' };
+    case 'idle':           return { color: '#6b7280' };
+    case 'out_of_service': return { color: '#dc2626' };
+    default:               return { color: '#6b7280' };
   }
 }
 
@@ -250,6 +399,38 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '500',
     color: '#374151',
+  },
+
+  // site selector
+  siteSelectorRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+  },
+  siteSelectorInner: {
+    flex: 1,
+    gap: 2,
+  },
+  siteSelectorLabel: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#6b7280',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+  },
+  siteSelectorValue: {
+    fontSize: 15,
+    fontWeight: '600',
+    color: '#0a7ea4',
+  },
+  siteSelectorChevron: {
+    fontSize: 18,
+    color: '#9ca3af',
+    marginLeft: 8,
   },
 
   // error
@@ -372,5 +553,68 @@ const styles = StyleSheet.create({
     fontSize: 14,
     color: '#9ca3af',
     fontStyle: 'italic',
+  },
+
+  // site picker modal
+  pickerContainer: {
+    flex: 1,
+    backgroundColor: '#f3f4f6',
+  },
+  pickerHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 16,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#e5e7eb',
+  },
+  pickerTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  pickerDone: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#0a7ea4',
+  },
+  pickerBody: {
+    padding: 16,
+    gap: 8,
+  },
+  pickerItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.04,
+    shadowRadius: 4,
+    elevation: 1,
+  },
+  pickerItemSelected: {
+    backgroundColor: '#eff6ff',
+    borderWidth: 1.5,
+    borderColor: '#0a7ea4',
+  },
+  pickerItemText: {
+    flex: 1,
+    fontSize: 15,
+    color: '#374151',
+    fontWeight: '500',
+  },
+  pickerItemTextSelected: {
+    color: '#0a7ea4',
+    fontWeight: '700',
+  },
+  pickerItemCheck: {
+    fontSize: 16,
+    color: '#0a7ea4',
+    fontWeight: '700',
   },
 });

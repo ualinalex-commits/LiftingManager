@@ -11,7 +11,8 @@ export default function TabLayout() {
   const colorScheme = useColorScheme();
   const { role } = useAuth();
   const isGlobalAdmin = role === 'global_admin';
-  const isCompanyOrOperator = role === 'company_admin' || role === 'operator';
+  const isCompanyAdmin = role === 'company_admin';
+  const isOperator = role === 'operator';
 
   return (
     <Tabs
@@ -23,39 +24,39 @@ export default function TabLayout() {
       {/* Hide the old index.tsx — (dashboard) group takes over this tab */}
       <Tabs.Screen name="index" options={{ href: null }} />
 
-      {/* Dashboard — global_admin only */}
+      {/* Dashboard — global_admin sees company list; company_admin sees sites list */}
       <Tabs.Screen
         name="(dashboard)"
         options={{
-          title: isGlobalAdmin ? 'Dashboard' : 'Home',
+          title: isGlobalAdmin ? 'Dashboard' : 'Sites',
           tabBarIcon: ({ color }) => (
             <IconSymbol
               size={28}
-              name={isGlobalAdmin ? 'building.2.fill' : 'house.fill'}
+              name={isGlobalAdmin ? 'building.2.fill' : 'map.fill'}
               color={color}
             />
           ),
         }}
       />
 
-      {/* Live Dashboard — global_admin only */}
+      {/* Live Dashboard — global_admin and company_admin */}
       <Tabs.Screen
         name="live-dashboard"
         options={{
           title: 'Live Dashboard',
-          href: isGlobalAdmin ? undefined : null,
+          href: isGlobalAdmin || isCompanyAdmin ? undefined : null,
           tabBarIcon: ({ color }) => (
             <IconSymbol size={28} name="chart.bar.fill" color={color} />
           ),
         }}
       />
 
-      {/* Management — company_admin and operator only */}
+      {/* Management — operator only */}
       <Tabs.Screen
         name="management"
         options={{
           title: 'Management',
-          href: isCompanyOrOperator ? undefined : null,
+          href: isOperator ? undefined : null,
           tabBarIcon: ({ color }) => (
             <IconSymbol size={28} name="gearshape.fill" color={color} />
           ),

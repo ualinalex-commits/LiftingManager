@@ -105,6 +105,10 @@ export default function IndexScreen() {
     return <CompanyDashboard />;
   }
 
+  if (role === 'company_admin') {
+    return <CompanyAdminDashboard />;
+  }
+
   if (showDebug) {
     return (
       <SafeAreaView style={styles.centered}>
@@ -143,6 +147,359 @@ export default function IndexScreen() {
         <ThemedText>Use the tabs below to navigate the app.</ThemedText>
       </ThemedView>
     </ParallaxScrollView>
+  );
+}
+
+// ─── company admin dashboard (sites list) ────────────────────────────────────
+
+type Site = {
+  id: string;
+  name: string;
+  address: string | null;
+  postcode: string | null;
+  company_id: string;
+};
+
+type APUser = {
+  id: string;
+  name: string | null;
+  site_id: string | null;
+};
+
+type SiteWithStats = Site & {
+  ap: APUser | null;
+  craneCount: number;
+  operativeCount: number;
+};
+
+function CompanyAdminDashboard() {
+  const { companyId, userId } = useAuth();
+  const [sites, setSites] = useState<SiteWithStats[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+
+  const [showAddSite, setShowAddSite] = useState(false);
+  const [showAssignAP, setShowAssignAP] = useState(false);
+  const [targetSite, setTargetSite] = useState<SiteWithStats | null>(null);
+
+  const navigating = useRef(false);
+
+  const loadSites = useCallback(async () => {
+    if (!companyId) return;
+    setLoading(true);
+    setError('');
+    try {
+      const [sitesResult, apResult, cranesResult, operativesResult] = await Promise.allSettled([
+        supabase.from('sites').select('id, name, address, postcode, company_id').eq('company_id', companyId).order('name'),
+        supabase.from('users').select('id, name, site_id').eq('company_id', companyId).eq('role', 'ap'),
+        supabase.from('cranes').select('id, site_id').eq('company_id', companyId),
+        supabase.from('users').select('id, site_id, role').eq('company_id', companyId).in('role', ['operator', 'ap']),
+      ]);
+
+      const rawSites: Site[] = (sitesResult.status === 'fulfilled' && !sitesResult.value.error)
+        ? (sitesResult.value.data ?? []) : [];
+
+      const apUsers: APUser[] = (apResult.status === 'fulfilled' && !apResult.value.error)
+        ? (apResult.value.data ?? []) : [];
+
+      const cranes: { id: string; site_id: string | null }[] = (cranesResult.status === 'fulfilled' && !cranesResult.value.error)
+        ? (cranesResult.value.data ?? []) : [];
+
+      const operatives: { id: string; site_id: string | null; role: string }[] = (operativesResult.status === 'fulfilled' && !operativesResult.value.error)
+        ? (operativesResult.value.data ?? []) : [];
+
+      const merged: SiteWithStats[] = rawSites.map((s) => ({
+        ...s,
+        ap: apUsers.find((u) => u.site_id === s.id) ?? null,
+        craneCount: cranes.filter((c) => c.site_id === s.id).length,
+        operativeCount: operatives.filter((u) => u.site_id === s.id).length,
+      }));
+
+      setSites(merged);
+    } catch (e: any) {
+      setError(e.message ?? 'Failed to load sites.');
+    } finally {
+      setLoading(false);
+    }
+  }, [companyId]);
+
+  useEffect(() => { loadSites(); }, [loadSites]);
+
+  function openAssignAP(site: SiteWithStats) {
+    setTargetSite(site);
+    setShowAssignAP(true);
+  }
+
+  function openSiteDetail(site: SiteWithStats) {
+    if (navigating.current) return;
+    navigating.current = true;
+    router.push({ pathname: '/site/[id]' as any, params: { id: site.id, name: site.name } });
+    setTimeout(() => { navigating.current = false; }, 800);
+  }
+
+  async function handleSignOut() {
+    await supabase.auth.signOut();
+    router.replace('/login');
+  }
+
+  if (loading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" color="#0a7ea4" />
+      </View>
+    );
+  }
+
+  return (
+    <SafeAreaView style={styles.dashboardContainer}>
+      <View style={styles.header}>
+        <Text style={styles.headerTitle}>Sites</Text>
+        <View style={styles.headerActions}>
+          <Pressable style={styles.addButton} onPress={() => setShowAddSite(true)}>
+            <Text style={styles.addButtonText}>+ Add Site</Text>
+          </Pressable>
+          <Pressable style={styles.signOutButton} onPress={handleSignOut}>
+            <Text style={styles.signOutButtonText}>Sign Out</Text>
+          </Pressable>
+        </View>
+      </View>
+
+      {error ? (
+        <View style={styles.errorBanner}>
+          <Text style={styles.errorBannerText}>{error}</Text>
+          <Pressable onPress={loadSites}>
+            <Text style={styles.errorBannerRetry}>Retry</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
+      {sites.length === 0 && !loading ? (
+        <View style={styles.emptyState}>
+          <Text style={styles.emptyStateText}>No sites yet.</Text>
+          <Text style={styles.emptyStateSubtext}>
+            Tap <Text style={{ fontWeight: '600' }}>+ Add Site</Text> to get started.
+          </Text>
+        </View>
+      ) : (
+        <FlatList
+          data={sites}
+          keyExtractor={(item) => item.id}
+          contentContainerStyle={styles.listContent}
+          ItemSeparatorComponent={() => <View style={styles.separator} />}
+          renderItem={({ item }) => (
+            <SiteCard
+              site={item}
+              onAssignAP={() => openAssignAP(item)}
+              onViewDetails={() => openSiteDetail(item)}
+            />
+          )}
+        />
+      )}
+
+      <AddSiteModal
+        visible={showAddSite}
+        companyId={companyId ?? ''}
+        onClose={() => setShowAddSite(false)}
+        onSaved={loadSites}
+      />
+
+      <AssignAPModal
+        visible={showAssignAP}
+        site={targetSite}
+        companyId={companyId ?? ''}
+        onClose={() => { setShowAssignAP(false); setTargetSite(null); }}
+        onSaved={loadSites}
+      />
+    </SafeAreaView>
+  );
+}
+
+// ─── site card ────────────────────────────────────────────────────────────────
+
+function SiteCard({
+  site,
+  onAssignAP,
+  onViewDetails,
+}: {
+  site: SiteWithStats;
+  onAssignAP: () => void;
+  onViewDetails: () => void;
+}) {
+  return (
+    <View style={styles.card}>
+      <View style={styles.cardHeader}>
+        <Text style={styles.cardName}>{site.name}</Text>
+      </View>
+
+      {site.address ? <Text style={styles.cardMeta}>{site.address}{site.postcode ? `, ${site.postcode}` : ''}</Text> : null}
+
+      <View style={styles.siteStatsRow}>
+        <View style={styles.statChip}>
+          <Text style={styles.statChipValue}>{site.craneCount}</Text>
+          <Text style={styles.statChipLabel}>Cranes</Text>
+        </View>
+        <View style={styles.statChip}>
+          <Text style={styles.statChipValue}>{site.operativeCount}</Text>
+          <Text style={styles.statChipLabel}>Operatives</Text>
+        </View>
+        <View style={[styles.statChip, styles.statChipWide]}>
+          <Text style={styles.statChipLabel}>AP</Text>
+          <Text style={[styles.statChipValue, site.ap ? styles.apAssigned : styles.apMissing]}>
+            {site.ap?.name ?? 'Not assigned'}
+          </Text>
+        </View>
+      </View>
+
+      <View style={styles.cardActions}>
+        <Pressable style={styles.actionButton} onPress={onAssignAP}>
+          <Text style={styles.actionButtonText}>Assign AP</Text>
+        </Pressable>
+        <Pressable style={[styles.actionButton, styles.actionButtonChevron]} onPress={onViewDetails}>
+          <Text style={styles.actionButtonTextSecondary}>View Details →</Text>
+        </Pressable>
+      </View>
+    </View>
+  );
+}
+
+// ─── add site modal ───────────────────────────────────────────────────────────
+
+function AddSiteModal({
+  visible,
+  companyId,
+  onClose,
+  onSaved,
+}: {
+  visible: boolean;
+  companyId: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [name, setName] = useState('');
+  const [address, setAddress] = useState('');
+  const [postcode, setPostcode] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  function reset() { setName(''); setAddress(''); setPostcode(''); setError(''); }
+  function handleClose() { reset(); onClose(); }
+
+  async function handleSave() {
+    if (!name.trim()) { setError('Site name is required.'); return; }
+    if (!companyId) { setError('No company assigned to your account.'); return; }
+    setSaving(true);
+    setError('');
+    const { error: insertError } = await supabase.from('sites').insert({
+      name: name.trim(),
+      address: address.trim() || null,
+      postcode: postcode.trim() || null,
+      company_id: companyId,
+    });
+    setSaving(false);
+    if (insertError) { setError(insertError.message); return; }
+    reset();
+    onSaved();
+    onClose();
+  }
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleClose}>
+      <KeyboardAvoidingView style={styles.modalContainer} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalTitle}>Add Site</Text>
+          <Pressable onPress={handleClose}><Text style={styles.modalCancel}>Cancel</Text></Pressable>
+        </View>
+        <ScrollView contentContainerStyle={styles.modalBody} keyboardShouldPersistTaps="handled">
+          <FormField label="Site Name *" value={name} onChangeText={setName} placeholder="Canary Wharf Tower" />
+          <FormField label="Address" value={address} onChangeText={setAddress} placeholder="1 Canada Square, London" />
+          <FormField label="Postcode" value={postcode} onChangeText={setPostcode} placeholder="E14 5AB" autoCapitalize="characters" />
+          {error ? <Text style={styles.formError}>{error}</Text> : null}
+          <Pressable style={[styles.saveButton, saving && styles.saveButtonDisabled]} onPress={handleSave} disabled={saving}>
+            {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveButtonText}>Save Site</Text>}
+          </Pressable>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </Modal>
+  );
+}
+
+// ─── assign AP modal ──────────────────────────────────────────────────────────
+
+function AssignAPModal({
+  visible,
+  site,
+  companyId,
+  onClose,
+  onSaved,
+}: {
+  visible: boolean;
+  site: SiteWithStats | null;
+  companyId: string;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [cpcsNumber, setCpcsNumber] = useState('');
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState('');
+
+  function reset() { setName(''); setEmail(''); setPhone(''); setCpcsNumber(''); setError(''); }
+  function handleClose() { reset(); onClose(); }
+
+  async function handleSave() {
+    if (!name.trim()) { setError('Name is required.'); return; }
+    if (!email.trim()) { setError('Email is required.'); return; }
+    if (!site) return;
+    setSaving(true);
+    setError('');
+    const { error: insertError } = await supabase.from('users').insert({
+      name: name.trim(),
+      email: email.trim().toLowerCase(),
+      phone: phone.trim() || null,
+      cpcs_number: cpcsNumber.trim() || null,
+      role: 'ap',
+      site_id: site.id,
+      company_id: companyId,
+      is_activated: false,
+    });
+    setSaving(false);
+    if (insertError) { setError(insertError.message); return; }
+    reset();
+    onSaved();
+    onClose();
+  }
+
+  return (
+    <Modal visible={visible} animationType="slide" presentationStyle="pageSheet" onRequestClose={handleClose}>
+      <KeyboardAvoidingView style={styles.modalContainer} behavior={Platform.OS === 'ios' ? 'padding' : 'height'}>
+        <View style={styles.modalHeader}>
+          <Text style={styles.modalTitle}>Assign AP</Text>
+          <Pressable onPress={handleClose}><Text style={styles.modalCancel}>Cancel</Text></Pressable>
+        </View>
+        {site && (
+          <View style={styles.assignSubtitleRow}>
+            <Text style={styles.assignSubtitle}>
+              Creating Appointed Person for <Text style={{ fontWeight: '700' }}>{site.name}</Text>
+            </Text>
+            {site.ap && (
+              <Text style={styles.assignCurrentAdmin}>Current AP: {site.ap.name ?? 'Unknown'}</Text>
+            )}
+          </View>
+        )}
+        <ScrollView contentContainerStyle={styles.modalBody} keyboardShouldPersistTaps="handled">
+          <FormField label="Full Name *" value={name} onChangeText={setName} placeholder="Jane Smith" />
+          <FormField label="Email *" value={email} onChangeText={setEmail} placeholder="jane@company.com" keyboardType="email-address" autoCapitalize="none" />
+          <FormField label="Phone" value={phone} onChangeText={setPhone} placeholder="+44 20 1234 5678" keyboardType="phone-pad" />
+          <FormField label="CPCS Number" value={cpcsNumber} onChangeText={setCpcsNumber} placeholder="A12345B" autoCapitalize="characters" />
+          {error ? <Text style={styles.formError}>{error}</Text> : null}
+          <Pressable style={[styles.saveButton, saving && styles.saveButtonDisabled]} onPress={handleSave} disabled={saving}>
+            {saving ? <ActivityIndicator color="#fff" /> : <Text style={styles.saveButtonText}>Create AP User</Text>}
+          </Pressable>
+        </ScrollView>
+      </KeyboardAvoidingView>
+    </Modal>
   );
 }
 
@@ -908,5 +1265,43 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 15,
     fontWeight: '600',
+  },
+
+  // site card stats row
+  siteStatsRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  statChip: {
+    flex: 1,
+    backgroundColor: '#f3f4f6',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 10,
+    alignItems: 'center',
+  },
+  statChipWide: {
+    flex: 2,
+  },
+  statChipValue: {
+    fontSize: 16,
+    fontWeight: '700',
+    color: '#111827',
+  },
+  statChipLabel: {
+    fontSize: 11,
+    fontWeight: '500',
+    color: '#6b7280',
+    marginTop: 2,
+  },
+  apAssigned: {
+    fontSize: 13,
+    color: '#16a34a',
+  },
+  apMissing: {
+    fontSize: 13,
+    color: '#9ca3af',
+    fontStyle: 'italic',
   },
 });

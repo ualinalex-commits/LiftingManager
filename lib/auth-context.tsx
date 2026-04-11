@@ -2,12 +2,13 @@ import { createContext, useContext, useEffect, useState, ReactNode } from 'react
 import { Session } from '@supabase/supabase-js';
 import { supabase } from './supabase';
 
-export type UserRole = 'global_admin' | 'company_admin' | 'operator' | null;
+export type UserRole = 'global_admin' | 'company_admin' | 'ap' | 'operator' | null;
 
 type AuthContextType = {
   session: Session | null;
   role: UserRole;
   userId: string | null;
+  companyId: string | null;
   loading: boolean;
   roleError: string | null;
 };
@@ -16,23 +17,25 @@ const AuthContext = createContext<AuthContextType>({
   session: null,
   role: null,
   userId: null,
+  companyId: null,
   loading: true,
   roleError: null,
 });
 
-async function fetchRole(userId: string): Promise<{ role: UserRole; error: string | null }> {
+async function fetchUserData(userId: string): Promise<{ role: UserRole; companyId: string | null; error: string | null }> {
   const { data, error } = await supabase
     .from('users')
-    .select('role')
+    .select('role, company_id')
     .eq('supabase_auth_uid', userId)
     .single();
-  console.log('[fetchRole] userId:', userId, '| data:', data, '| error:', error?.message ?? null);
-  return { role: (data?.role as UserRole) ?? null, error: error?.message ?? null };
+  console.log('[fetchUserData] userId:', userId, '| data:', data, '| error:', error?.message ?? null);
+  return { role: (data?.role as UserRole) ?? null, companyId: data?.company_id ?? null, error: error?.message ?? null };
 }
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [role, setRole] = useState<UserRole>(null);
+  const [companyId, setCompanyId] = useState<string | null>(null);
   const [roleError, setRoleError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -40,8 +43,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     supabase.auth.getSession().then(async ({ data: { session } }) => {
       setSession(session);
       if (session?.user) {
-        const { role: r, error: e } = await fetchRole(session.user.id);
+        const { role: r, companyId: c, error: e } = await fetchUserData(session.user.id);
         setRole(r);
+        setCompanyId(c);
         setRoleError(e);
       }
       setLoading(false);
@@ -51,11 +55,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       async (_event, session) => {
         setSession(session);
         if (session?.user) {
-          const { role: r, error: e } = await fetchRole(session.user.id);
+          const { role: r, companyId: c, error: e } = await fetchUserData(session.user.id);
           setRole(r);
+          setCompanyId(c);
           setRoleError(e);
         } else {
           setRole(null);
+          setCompanyId(null);
           setRoleError(null);
         }
         setLoading(false);
@@ -67,7 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   return (
     <AuthContext.Provider
-      value={{ session, role, userId: session?.user?.id ?? null, loading, roleError }}>
+      value={{ session, role, userId: session?.user?.id ?? null, companyId, loading, roleError }}>
       {children}
     </AuthContext.Provider>
   );
