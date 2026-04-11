@@ -13,3 +13,6 @@ export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
     detectSessionInUrl: false,
   },
 });
+
+const supabaseServiceKey = process.env.EXPO_PUBLIC_SUPABASE_SERVICE_KEY!;
+export const adminSupabase = createClient(supabaseUrl, supabaseServiceKey);

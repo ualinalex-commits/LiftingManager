@@ -10,8 +10,7 @@ import {
   View,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
-import { createClient } from '@supabase/supabase-js';
-import { supabase } from '@/lib/supabase';
+import { supabase, adminSupabase } from '@/lib/supabase';
 
 export default function SetPasswordScreen() {
   const { email } = useLocalSearchParams<{ email: string }>();
@@ -36,26 +35,19 @@ export default function SetPasswordScreen() {
     setError('');
     setLoading(true);
     try {
-      // 1. Create the auth account with the chosen password
-      console.log('[set-password] signUp email value:', JSON.stringify(email), 'type:', typeof email, 'length:', email?.length);
-      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+      // 1. Create the auth account with the chosen password (no confirmation email)
+      const { data: createData, error: createError } = await adminSupabase.auth.admin.createUser({
         email,
         password,
+        email_confirm: true,
       });
-      if (signUpError) throw signUpError;
-      if (!signUpData.user) throw new Error('Account creation failed. Please try again.');
+      if (createError) throw createError;
+      if (!createData.user) throw new Error('Account creation failed. Please try again.');
 
-      // 2. Link the auth uid and mark the user as activated using the service role,
-      //    since there is no active session yet to satisfy RLS.
-      const serviceKey = process.env.EXPO_PUBLIC_SUPABASE_SERVICE_KEY;
-      if (!serviceKey) throw new Error('Service key not configured.');
-      const adminClient = createClient(
-        process.env.EXPO_PUBLIC_SUPABASE_URL!,
-        serviceKey,
-      );
-      const { error: updateError } = await adminClient
+      // 2. Link the auth uid and mark the user as activated
+      const { error: updateError } = await adminSupabase
         .from('users')
-        .update({ supabase_auth_uid: signUpData.user.id, is_activated: true })
+        .update({ supabase_auth_uid: createData.user.id, is_activated: true })
         .eq('email', email);
       if (updateError) throw updateError;
 
