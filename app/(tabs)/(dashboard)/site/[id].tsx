@@ -29,7 +29,7 @@ type Crane = {
 
 type SiteUser = {
   id: string;
-  full_name: string | null;
+  name: string | null;
   role: string;
   cpcs_number?: string | null;
 };
@@ -68,7 +68,7 @@ export default function SiteDetailScreen() {
       // Fetch related data; tables may not exist yet — ignore those errors gracefully
       const [cranesResult, usersResult, kitsResult] = await Promise.allSettled([
         supabase.from('cranes').select('id, name, serial_number, model').eq('site_id', id).order('name'),
-        supabase.from('users').select('id, full_name, role, cpcs_number').eq('site_id', id).order('full_name'),
+        supabase.from('users').select('id, name, role, cpcs_number').eq('site_id', id).order('name'),
         supabase.from('rescue_kits').select('id, name, serial_number').eq('site_id', id).order('name'),
       ]);
 
@@ -156,7 +156,7 @@ export default function SiteDetailScreen() {
               {users.map((user, i) => (
                 <React.Fragment key={user.id}>
                   <View style={styles.listItem}>
-                    <Text style={styles.listItemTitle}>{user.full_name ?? 'Unnamed'}</Text>
+                    <Text style={styles.listItemTitle}>{user.name ?? 'Unnamed'}</Text>
                     <Text style={styles.listItemSubtitle}>{formatRole(user.role)}</Text>
                     {user.cpcs_number ? (
                       <Text style={styles.listItemMeta}>CPCS: {user.cpcs_number}</Text>

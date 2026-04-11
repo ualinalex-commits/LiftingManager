@@ -15,7 +15,7 @@
  * 2. users table:
  *    id uuid primary key default gen_random_uuid(),
  *    supabase_auth_uid text unique,
- *    full_name text,
+ *    name text,
  *    email text,
  *    phone text,
  *    cpcs_number text,

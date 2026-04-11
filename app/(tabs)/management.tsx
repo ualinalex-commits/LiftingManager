@@ -15,7 +15,7 @@ import { useAuth } from '@/lib/auth-context';
 
 type UserRow = {
   id: string;
-  full_name: string | null;
+  name: string | null;
   role: string;
   cpcs_number: string | null;
 };
@@ -73,9 +73,9 @@ export default function ManagementScreen() {
           supabase.from('companies').select('name').eq('id', companyId).single(),
           supabase
             .from('users')
-            .select('id, full_name, role, cpcs_number')
+            .select('id, name, role, cpcs_number')
             .eq('company_id', companyId)
-            .order('full_name'),
+            .order('name'),
           supabase
             .from('cranes')
             .select('id, name, model, serial_number')
@@ -159,7 +159,7 @@ export default function ManagementScreen() {
           {users.map((u, i) => (
             <React.Fragment key={u.id}>
               <View style={styles.listItem}>
-                <Text style={styles.listItemTitle}>{u.full_name ?? 'Unnamed'}</Text>
+                <Text style={styles.listItemTitle}>{u.name ?? 'Unnamed'}</Text>
                 <Text style={styles.listItemSub}>{formatRole(u.role)}</Text>
                 {u.cpcs_number ? (
                   <Text style={styles.listItemMeta}>CPCS: {u.cpcs_number}</Text>

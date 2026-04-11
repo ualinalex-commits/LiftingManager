@@ -10,6 +10,7 @@ import {
   View,
 } from 'react-native';
 import { router, useLocalSearchParams } from 'expo-router';
+import { createClient } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 
 export default function SetPasswordScreen() {
@@ -35,8 +36,35 @@ export default function SetPasswordScreen() {
     setError('');
     setLoading(true);
     try {
-      const { error: updateError } = await supabase.auth.updateUser({ password });
+      // 1. Create the auth account with the chosen password
+      const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+      });
+      if (signUpError) throw signUpError;
+      if (!signUpData.user) throw new Error('Account creation failed. Please try again.');
+
+      // 2. Link the auth uid and mark the user as activated using the service role,
+      //    since there is no active session yet to satisfy RLS.
+      const serviceKey = process.env.EXPO_PUBLIC_SUPABASE_SERVICE_KEY;
+      if (!serviceKey) throw new Error('Service key not configured.');
+      const adminClient = createClient(
+        process.env.EXPO_PUBLIC_SUPABASE_URL!,
+        serviceKey,
+      );
+      const { error: updateError } = await adminClient
+        .from('users')
+        .update({ supabase_auth_uid: signUpData.user.id, is_activated: true })
+        .eq('email', email);
       if (updateError) throw updateError;
+
+      // 3. Sign in to establish a proper session now that the profile is linked
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (signInError) throw signInError;
+
       router.replace('/(tabs)');
     } catch (err: any) {
       setError(err.message ?? 'Failed to set password. Please try again.');
