@@ -1,5 +1,6 @@
 import { Tabs } from 'expo-router';
 import React from 'react';
+import { ActivityIndicator, View } from 'react-native';
 
 import { HapticTab } from '@/components/haptic-tab';
 import { IconSymbol } from '@/components/ui/icon-symbol';
@@ -9,11 +10,31 @@ import { useAuth } from '@/lib/auth-context';
 
 export default function TabLayout() {
   const colorScheme = useColorScheme();
-  const { role } = useAuth();
-  const isGlobalAdmin = role === 'global_admin';
-  const isCompanyAdmin = role === 'company_admin';
-  const isOperator = role === 'operator';
-  const isAP = role === 'ap';
+  const { role, loading } = useAuth();
+
+  // Never show a blank screen while the role is still being fetched
+  if (loading) {
+    return (
+      <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#f3f4f6' }}>
+        <ActivityIndicator size="large" color="#0a7ea4" />
+      </View>
+    );
+  }
+
+  // ── role flags ─────────────────────────────────────────────────────────────
+  const isGlobalAdmin   = role === 'global_admin';
+  const isCompanyAdmin  = role === 'company_admin';
+  const isAP            = role === 'ap';
+  const isSupervisor    = role === 'supervisor';
+  const isCraneOperator = role === 'crane_operator';
+  const isSlinger       = role === 'slinger';
+  const isSubcontractor = role === 'subcontractor';
+
+  // ── derived visibility groups ──────────────────────────────────────────────
+  const isAdminTier    = isGlobalAdmin || isCompanyAdmin;
+  const hasSiteDash    = isAP || isSupervisor || isCraneOperator;
+  const hasForms       = isAP || isSupervisor || isCraneOperator;
+  const hasSchedule    = isAP || isSupervisor || isSlinger || isSubcontractor;
 
   return (
     <Tabs
@@ -22,15 +43,20 @@ export default function TabLayout() {
         headerShown: false,
         tabBarButton: HapticTab,
       }}>
-      {/* Hide the old index.tsx — (dashboard) group takes over this tab */}
-      <Tabs.Screen name="index" options={{ href: null }} />
 
-      {/* Dashboard — global_admin sees company list; company_admin sees sites list */}
+      {/* ── Hidden legacy routes ─────────────────────────────────────────── */}
+      <Tabs.Screen name="index"      options={{ href: null }} />
+      <Tabs.Screen name="explore"    options={{ href: null }} />
+      <Tabs.Screen name="management" options={{ href: null }} />
+
+      {/* ── Admin tier ───────────────────────────────────────────────────── */}
+
+      {/* Dashboard — global_admin sees company list; company_admin sees sites */}
       <Tabs.Screen
         name="(dashboard)"
         options={{
           title: isGlobalAdmin ? 'Dashboard' : 'Sites',
-          href: isAP ? null : undefined,
+          href: isAdminTier ? undefined : null,
           tabBarIcon: ({ color }) => (
             <IconSymbol
               size={28}
@@ -46,52 +72,40 @@ export default function TabLayout() {
         name="live-dashboard"
         options={{
           title: 'Live Dashboard',
-          href: isGlobalAdmin || isCompanyAdmin ? undefined : null,
+          href: isAdminTier ? undefined : null,
           tabBarIcon: ({ color }) => (
             <IconSymbol size={28} name="chart.bar.fill" color={color} />
           ),
         }}
       />
 
-      {/* Management — operator only */}
-      <Tabs.Screen
-        name="management"
-        options={{
-          title: 'Management',
-          href: isOperator ? undefined : null,
-          tabBarIcon: ({ color }) => (
-            <IconSymbol size={28} name="gearshape.fill" color={color} />
-          ),
-        }}
-      />
+      {/* ── Site-level roles ─────────────────────────────────────────────── */}
 
-      {/* ── AP tabs ────────────────────────────────────────────────────── */}
-
-      {/* AP Dashboard */}
+      {/* Dashboard — ap, supervisor, crane_operator */}
       <Tabs.Screen
         name="(ap-dashboard)"
         options={{
           title: 'Dashboard',
-          href: isAP ? undefined : null,
+          href: hasSiteDash ? undefined : null,
           tabBarIcon: ({ color }) => (
             <IconSymbol size={28} name="house.fill" color={color} />
           ),
         }}
       />
 
-      {/* AP Forms */}
+      {/* Forms — ap, supervisor, crane_operator */}
       <Tabs.Screen
         name="ap-forms"
         options={{
           title: 'Forms',
-          href: isAP ? undefined : null,
+          href: hasForms ? undefined : null,
           tabBarIcon: ({ color }) => (
             <IconSymbol size={28} name="doc.text.fill" color={color} />
           ),
         }}
       />
 
-      {/* AP Management */}
+      {/* Management — ap only */}
       <Tabs.Screen
         name="(ap-management)"
         options={{
@@ -103,25 +117,26 @@ export default function TabLayout() {
         }}
       />
 
-      {/* AP Schedule */}
+      {/* Schedule — ap, supervisor, slinger, subcontractor */}
       <Tabs.Screen
         name="ap-schedule"
         options={{
           title: 'Schedule',
-          href: isAP ? undefined : null,
+          href: hasSchedule ? undefined : null,
           tabBarIcon: ({ color }) => (
             <IconSymbol size={28} name="calendar" color={color} />
           ),
         }}
       />
 
+      {/* Daily Briefing — slinger only */}
       <Tabs.Screen
-        name="explore"
+        name="daily-briefing"
         options={{
-          title: 'Explore',
-          href: null,
+          title: 'Daily Briefing',
+          href: isSlinger ? undefined : null,
           tabBarIcon: ({ color }) => (
-            <IconSymbol size={28} name="paperplane.fill" color={color} />
+            <IconSymbol size={28} name="megaphone.fill" color={color} />
           ),
         }}
       />
