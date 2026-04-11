@@ -13,6 +13,7 @@ export default function TabLayout() {
   const isGlobalAdmin = role === 'global_admin';
   const isCompanyAdmin = role === 'company_admin';
   const isOperator = role === 'operator';
+  const isAP = role === 'ap';
 
   return (
     <Tabs
@@ -29,6 +30,7 @@ export default function TabLayout() {
         name="(dashboard)"
         options={{
           title: isGlobalAdmin ? 'Dashboard' : 'Sites',
+          href: isAP ? null : undefined,
           tabBarIcon: ({ color }) => (
             <IconSymbol
               size={28}
@@ -59,6 +61,56 @@ export default function TabLayout() {
           href: isOperator ? undefined : null,
           tabBarIcon: ({ color }) => (
             <IconSymbol size={28} name="gearshape.fill" color={color} />
+          ),
+        }}
+      />
+
+      {/* ── AP tabs ────────────────────────────────────────────────────── */}
+
+      {/* AP Dashboard */}
+      <Tabs.Screen
+        name="(ap-dashboard)"
+        options={{
+          title: 'Dashboard',
+          href: isAP ? undefined : null,
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={28} name="house.fill" color={color} />
+          ),
+        }}
+      />
+
+      {/* AP Forms */}
+      <Tabs.Screen
+        name="ap-forms"
+        options={{
+          title: 'Forms',
+          href: isAP ? undefined : null,
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={28} name="doc.text.fill" color={color} />
+          ),
+        }}
+      />
+
+      {/* AP Management */}
+      <Tabs.Screen
+        name="(ap-management)"
+        options={{
+          title: 'Management',
+          href: isAP ? undefined : null,
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={28} name="person.3.fill" color={color} />
+          ),
+        }}
+      />
+
+      {/* AP Schedule */}
+      <Tabs.Screen
+        name="ap-schedule"
+        options={{
+          title: 'Schedule',
+          href: isAP ? undefined : null,
+          tabBarIcon: ({ color }) => (
+            <IconSymbol size={28} name="calendar" color={color} />
           ),
         }}
       />
