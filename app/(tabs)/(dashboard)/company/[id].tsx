@@ -36,7 +36,7 @@ type Site = {
 
 type AdminUser = {
   id: string;
-  full_name: string | null;
+  name: string | null;
   email: string | null;
 };
 
@@ -65,7 +65,7 @@ export default function CompanyDetailScreen() {
         supabase.from('sites').select('*').eq('company_id', id).order('name'),
         supabase
           .from('users')
-          .select('id, full_name, email')
+          .select('id, name, email')
           .eq('company_id', id)
           .eq('role', 'company_admin')
           .maybeSingle(),
@@ -148,7 +148,7 @@ export default function CompanyDetailScreen() {
                 <Text style={styles.sectionLabel}>Company Admin</Text>
                 {admin ? (
                   <View style={styles.adminCard}>
-                    <Text style={styles.adminName}>{admin.full_name ?? 'Unnamed'}</Text>
+                    <Text style={styles.adminName}>{admin.name ?? 'Unnamed'}</Text>
                     {admin.email ? (
                       <Text style={styles.adminEmail}>{admin.email}</Text>
                     ) : null}

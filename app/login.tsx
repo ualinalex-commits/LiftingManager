@@ -37,14 +37,12 @@ export default function LoginScreen() {
 
       if (rpcError) throw rpcError;
 
-      if (!data || data.length === 0) {
+      if (!data) {
         setError('No account found with those details.');
         return;
       }
 
-      const user = data[0];
-
-      if (!user.is_activated) {
+      if (!data.is_activated) {
         router.push({ pathname: '/set-password', params: { email: email.trim().toLowerCase() } });
       } else {
         setStep('password');

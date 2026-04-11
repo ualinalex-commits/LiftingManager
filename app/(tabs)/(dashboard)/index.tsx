@@ -36,7 +36,7 @@
  *      on users for insert with check (is_global_admin());
  */
 
-import React, { useCallback, useEffect, useState } from 'react';
+import React, { useCallback, useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   FlatList,
@@ -158,6 +158,8 @@ function CompanyDashboard() {
   const [showCreateAdmin, setShowCreateAdmin] = useState(false);
   const [targetCompany, setTargetCompany] = useState<CompanyWithAdmin | null>(null);
 
+  const navigating = useRef(false);
+
   const loadCompanies = useCallback(async () => {
     setLoading(true);
     setError('');
@@ -196,10 +198,13 @@ function CompanyDashboard() {
   }
 
   function openCompanyDetail(company: CompanyWithAdmin) {
+    if (navigating.current) return;
+    navigating.current = true;
     router.push({
       pathname: '/company/[id]' as any,
       params: { id: company.id, name: company.name },
     });
+    setTimeout(() => { navigating.current = false; }, 800);
   }
 
   async function handleSignOut() {
