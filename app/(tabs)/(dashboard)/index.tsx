@@ -350,7 +350,7 @@ function AddCompanyModal({
       address: address.trim() || null,
       phone: phone.trim() || null,
       email: email.trim() || null,
-      status: 'active',
+      is_active: true,
     });
     setSaving(false);
     if (insertError) { setError(insertError.message); return; }
@@ -427,7 +427,7 @@ function CreateAdminModal({
     setError('');
 
     const { error: insertError } = await supabase.from('users').insert({
-      full_name: fullName.trim(),
+      name: fullName.trim(),
       email: email.trim().toLowerCase(),
       phone: phone.trim() || null,
       cpcs_number: cpcsNumber.trim(),
