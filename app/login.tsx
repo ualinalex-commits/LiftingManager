@@ -32,7 +32,7 @@ export default function LoginScreen() {
     try {
       const { data, error: rpcError } = await supabase.rpc('lookup_user_credentials', {
         p_email: email.trim().toLowerCase(),
-        p_cpcs_number: cpcsNumber.trim(),
+        p_cpcs: cpcsNumber.trim(),
       });
 
       if (rpcError) throw rpcError;

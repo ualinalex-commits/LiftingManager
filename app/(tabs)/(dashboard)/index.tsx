@@ -73,7 +73,7 @@ type Company = {
 
 type UserRecord = {
   id: string;
-  full_name: string | null;
+  name: string | null;
   company_id: string | null;
   role: string;
 };
@@ -167,7 +167,7 @@ function CompanyDashboard() {
           supabase.from('companies').select('*').order('name'),
           supabase
             .from('users')
-            .select('id, full_name, company_id, role')
+            .select('id, name, company_id, role')
             .eq('role', 'company_admin'),
         ]);
 
@@ -258,6 +258,7 @@ function CompanyDashboard() {
         <FlatList
           data={companies}
           keyExtractor={(item) => item.id}
+          extraData={companies}
           contentContainerStyle={styles.listContent}
           ItemSeparatorComponent={() => <View style={styles.separator} />}
           renderItem={({ item }) => (
@@ -322,7 +323,7 @@ function CompanyCard({
       <View style={styles.adminRow}>
         <Text style={styles.adminLabel}>Admin: </Text>
         <Text style={styles.adminValue}>
-          {company.admin?.full_name ?? 'Not assigned'}
+          {company.admin?.name ?? 'Not assigned'}
         </Text>
       </View>
 
@@ -488,7 +489,7 @@ function CreateAdminModal({
             </Text>
             {company.admin && (
               <Text style={styles.assignCurrentAdmin}>
-                Current admin: {company.admin.full_name ?? 'Unknown'}
+                Current admin: {company.admin.name ?? 'Unknown'}
               </Text>
             )}
           </View>
