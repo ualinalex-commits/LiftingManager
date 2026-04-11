@@ -19,8 +19,10 @@ export default function TabLayout() {
         headerShown: false,
         tabBarButton: HapticTab,
       }}>
+      {/* Hide the old index.tsx — (dashboard) group takes over this tab */}
+      <Tabs.Screen name="index" options={{ href: null }} />
       <Tabs.Screen
-        name="index"
+        name="(dashboard)"
         options={{
           title: isGlobalAdmin ? 'Dashboard' : 'Home',
           tabBarIcon: ({ color }) => (
