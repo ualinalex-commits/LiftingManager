@@ -37,6 +37,7 @@ export default function SetPasswordScreen() {
     setLoading(true);
     try {
       // 1. Create the auth account with the chosen password
+      console.log('[set-password] signUp email value:', JSON.stringify(email), 'type:', typeof email, 'length:', email?.length);
       const { data: signUpData, error: signUpError } = await supabase.auth.signUp({
         email,
         password,
@@ -67,6 +68,7 @@ export default function SetPasswordScreen() {
 
       router.replace('/(tabs)');
     } catch (err: any) {
+      console.error('[set-password] full error object:', JSON.stringify(err, null, 2), err);
       setError(err.message ?? 'Failed to set password. Please try again.');
     } finally {
       setLoading(false);
