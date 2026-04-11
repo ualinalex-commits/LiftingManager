@@ -24,7 +24,7 @@ type Company = {
   address: string | null;
   phone: string | null;
   email: string | null;
-  status: 'active' | 'inactive';
+  is_active: boolean;
 };
 
 type Site = {
@@ -122,13 +122,13 @@ export default function CompanyDetailScreen() {
                   <Text style={styles.infoCardTitle}>{company.name}</Text>
                   <View style={[
                     styles.badge,
-                    company.status === 'active' ? styles.badgeActive : styles.badgeInactive,
+                    company.is_active ? styles.badgeActive : styles.badgeInactive,
                   ]}>
                     <Text style={[
                       styles.badgeText,
-                      company.status === 'active' ? styles.badgeTextActive : styles.badgeTextInactive,
+                      company.is_active ? styles.badgeTextActive : styles.badgeTextInactive,
                     ]}>
-                      {company.status === 'active' ? 'Active' : 'Inactive'}
+                      {company.is_active ? 'Active' : 'Inactive'}
                     </Text>
                   </View>
                 </View>

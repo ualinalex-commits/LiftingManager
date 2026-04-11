@@ -11,6 +11,7 @@ export default function TabLayout() {
   const colorScheme = useColorScheme();
   const { role } = useAuth();
   const isGlobalAdmin = role === 'global_admin';
+  const isCompanyOrOperator = role === 'company_admin' || role === 'operator';
 
   return (
     <Tabs
@@ -21,6 +22,8 @@ export default function TabLayout() {
       }}>
       {/* Hide the old index.tsx — (dashboard) group takes over this tab */}
       <Tabs.Screen name="index" options={{ href: null }} />
+
+      {/* Dashboard — global_admin only */}
       <Tabs.Screen
         name="(dashboard)"
         options={{
@@ -34,6 +37,8 @@ export default function TabLayout() {
           ),
         }}
       />
+
+      {/* Live Dashboard — global_admin only */}
       <Tabs.Screen
         name="live-dashboard"
         options={{
@@ -44,21 +49,24 @@ export default function TabLayout() {
           ),
         }}
       />
+
+      {/* Management — company_admin and operator only */}
       <Tabs.Screen
         name="management"
         options={{
           title: 'Management',
-          href: isGlobalAdmin ? undefined : null,
+          href: isCompanyOrOperator ? undefined : null,
           tabBarIcon: ({ color }) => (
             <IconSymbol size={28} name="gearshape.fill" color={color} />
           ),
         }}
       />
+
       <Tabs.Screen
         name="explore"
         options={{
           title: 'Explore',
-          href: isGlobalAdmin ? null : undefined,
+          href: null,
           tabBarIcon: ({ color }) => (
             <IconSymbol size={28} name="paperplane.fill" color={color} />
           ),

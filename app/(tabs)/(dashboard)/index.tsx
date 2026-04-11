@@ -68,7 +68,7 @@ type Company = {
   address: string | null;
   phone: string | null;
   email: string | null;
-  status: 'active' | 'inactive';
+  is_active: boolean;
 };
 
 type UserRecord = {
@@ -202,6 +202,19 @@ function CompanyDashboard() {
     });
   }
 
+  async function handleSignOut() {
+    await supabase.auth.signOut();
+    router.replace('/login');
+  }
+
+  async function toggleCompanyActive(company: CompanyWithAdmin) {
+    const { error } = await supabase
+      .from('companies')
+      .update({ is_active: !company.is_active })
+      .eq('id', company.id);
+    if (!error) loadCompanies();
+  }
+
   if (loading) {
     return (
       <View style={styles.centered}>
@@ -215,9 +228,14 @@ function CompanyDashboard() {
       {/* Header */}
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Companies</Text>
-        <Pressable style={styles.addButton} onPress={() => setShowAddCompany(true)}>
-          <Text style={styles.addButtonText}>+ Add Company</Text>
-        </Pressable>
+        <View style={styles.headerActions}>
+          <Pressable style={styles.addButton} onPress={() => setShowAddCompany(true)}>
+            <Text style={styles.addButtonText}>+ Add Company</Text>
+          </Pressable>
+          <Pressable style={styles.signOutButton} onPress={handleSignOut}>
+            <Text style={styles.signOutButtonText}>Sign Out</Text>
+          </Pressable>
+        </View>
       </View>
 
       {error ? (
@@ -247,6 +265,7 @@ function CompanyDashboard() {
               company={item}
               onPress={() => openCompanyDetail(item)}
               onAssignAdmin={() => openCreateAdmin(item)}
+              onToggleActive={() => toggleCompanyActive(item)}
             />
           )}
         />
@@ -274,22 +293,26 @@ function CompanyCard({
   company,
   onPress,
   onAssignAdmin,
+  onToggleActive,
 }: {
   company: CompanyWithAdmin;
   onPress: () => void;
   onAssignAdmin: () => void;
+  onToggleActive: () => void;
 }) {
-  const isActive = company.status === 'active';
+  const isActive = company.is_active;
 
   return (
-    <Pressable style={styles.card} onPress={onPress}>
+    <View style={styles.card}>
       <View style={styles.cardHeader}>
         <Text style={styles.cardName}>{company.name}</Text>
-        <View style={[styles.badge, isActive ? styles.badgeActive : styles.badgeInactive]}>
+        <Pressable
+          onPress={onToggleActive}
+          style={[styles.badge, isActive ? styles.badgeActive : styles.badgeInactive]}>
           <Text style={[styles.badgeText, isActive ? styles.badgeTextActive : styles.badgeTextInactive]}>
             {isActive ? 'Active' : 'Inactive'}
           </Text>
-        </View>
+        </Pressable>
       </View>
 
       {company.address ? (
@@ -306,14 +329,16 @@ function CompanyCard({
       <View style={styles.cardActions}>
         <Pressable
           style={styles.actionButton}
-          onPress={(e) => { e.stopPropagation(); onAssignAdmin(); }}>
+          onPress={onAssignAdmin}>
           <Text style={styles.actionButtonText}>Assign Admin</Text>
         </Pressable>
-        <View style={[styles.actionButton, styles.actionButtonChevron]}>
+        <Pressable
+          style={[styles.actionButton, styles.actionButtonChevron]}
+          onPress={onPress}>
           <Text style={styles.actionButtonTextSecondary}>View Details →</Text>
-        </View>
+        </Pressable>
       </View>
-    </Pressable>
+    </View>
   );
 }
 
@@ -427,7 +452,7 @@ function CreateAdminModal({
     setError('');
 
     const { error: insertError } = await supabase.from('users').insert({
-      name: fullName.trim(),
+      full_name: fullName.trim(),
       email: email.trim().toLowerCase(),
       phone: phone.trim() || null,
       cpcs_number: cpcsNumber.trim(),
@@ -626,6 +651,11 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#111827',
   },
+  headerActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
   addButton: {
     backgroundColor: '#0a7ea4',
     borderRadius: 8,
@@ -636,6 +666,18 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontWeight: '600',
+  },
+  signOutButton: {
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  signOutButtonText: {
+    color: '#6b7280',
+    fontSize: 14,
+    fontWeight: '500',
   },
 
   // error banner
